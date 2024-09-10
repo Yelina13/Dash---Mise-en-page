@@ -1,5 +1,6 @@
 import dash
 from dash import dcc, html, Input, Output
+import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
 
@@ -11,37 +12,53 @@ data = pd.read_csv(url, on_bad_lines='skip')  # Ignorer les lignes problématiqu
 data = data.dropna(subset=['  num_pages'])  # Supprimer les lignes où 'num_pages' est manquant
 data['  num_pages'] = data['  num_pages'].astype(int)  # S'assurer que 'num_pages' est un entier
 
-# 2. Initialiser l'application Dash
-app = dash.Dash(__name__)
+# 2. Créer une palette de couleurs pour les auteurs
+unique_authors = data['authors'].unique()
+color_palette = px.colors.qualitative.Plotly  # Palette de couleurs prédéfinie
+author_color_map = {author: color_palette[i % len(color_palette)] for i, author in enumerate(unique_authors)}
 
-# 3. Construire le layout de l'application
-app.layout = html.Div(children=[
-    # Titre principal
-    html.H1(children='Bibliothèque de Livres'),
+# 3. Initialiser l'application Dash avec le thème Bootstrap
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
-    # Sélection d'un auteur
-    html.Label('Sélectionnez un auteur:'),
-    dcc.Dropdown(
-        id='dropdown-authors',
-        options=[{'label': auteur, 'value': auteur} for auteur in data['authors'].unique()],
-        value=data['authors'].unique()[0]
-    ),
+# 4. Construire le layout de l'application avec DBC
+app.layout = dbc.Container([
+    dbc.Row([
+        dbc.Col(html.H1('Bibliothèque de Livres'), className='mb-4')
+    ]),
 
-    # Saisie d'un nombre maximal de pages
-    html.Label('Nombre maximal de pages:'),
-    dcc.Input(
-        id='input-pages-max',
-        type='number',
-        value=500
-    ),
+    dbc.Row([
+        dbc.Col([
+            html.Label('Sélectionnez un auteur:'),
+            dcc.Dropdown(
+                id='dropdown-authors',
+                options=[{'label': auteur, 'value': auteur} for auteur in unique_authors],
+                value=unique_authors[0],
+                style={'width': '100%'}
+            )
+        ], width=6),
 
-    # Graphique en barres créé avec Plotly Express
-    dcc.Graph(
-        id='graphique-pages-par-livre'
-    )
-])
+        dbc.Col([
+            html.Label('Nombre maximal de pages:'),
+            dcc.Input(
+                id='input-pages-max',
+                type='number',
+                value=500,
+                style={'width': '100%'}
+            )
+        ], width=6)
+    ], className='mb-4'),
 
-# 4. Callback pour mettre à jour le graphique en fonction de l'auteur sélectionné et du nombre de pages
+    dbc.Row([
+        dbc.Col(
+            dcc.Graph(
+                id='graphique-pages-par-livre',
+                style={'height': '80vh', 'width': '100%'}  # Ajuster la taille du graphique
+            )
+        )
+    ])
+], fluid=True)
+
+# 5. Callback pour mettre à jour le graphique en fonction de l'auteur sélectionné et du nombre de pages
 @app.callback(
     Output('graphique-pages-par-livre', 'figure'),
     Input('dropdown-authors', 'value'),
@@ -57,21 +74,22 @@ def update_graph(selected_author, max_pages):
     if filtered_data.empty:
         # Gérer le cas où aucun livre ne correspond aux critères de filtrage
         fig = px.bar(title=f'Aucun livre de {selected_author} avec moins de {max_pages} pages')
-        fig.update_layout(
-          width=1500,
-          height=1000 )
     else:
         # Trier les livres par nombre de pages et sélectionner les 10 premiers
         top_books = filtered_data.nlargest(10, '  num_pages')
 
-        # Créer le graphique en barres
-        fig = px.bar(top_books, x='title', y='  num_pages', title=f'Livres de {selected_author} avec moins de {max_pages} pages')
-        fig.update_layout(
-          width=1500,
-          height=1000 )
+        # Créer le graphique en barres avec des couleurs spécifiques pour les auteurs
+        fig = px.bar(
+            top_books,
+            x='title',
+            y='  num_pages',
+            color='authors',
+            color_discrete_map=author_color_map,
+            title=f'Livres de {selected_author} avec moins de {max_pages} pages'
+        )
 
     return fig
 
-# 5. Exécuter l'application
+# 6. Exécuter l'application
 if __name__ == '__main__':
     app.run_server(debug=True)
